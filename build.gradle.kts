@@ -29,7 +29,6 @@ sourceSets {
 }
 
 dependencies {
-	val yarnMappings: String by project
 	val loaderVersion: String by project
 	val fabricApiVersion: String by project
 	val configurateVersion: String by project
@@ -39,7 +38,7 @@ dependencies {
 	val starlightVersion: String by project
 	val confabricateVersion: String by project
 	minecraft("com.mojang:minecraft:${minecraftVersion}")
-	mappings("net.fabricmc:yarn:${yarnMappings}:v2")
+	mappings(loom.officialMojangMappings())
 	modImplementation("net.fabricmc:fabric-loader:${loaderVersion}")
 
 	modImplementation(include(fabricApi.module("fabric-api-base", fabricApiVersion))!!)

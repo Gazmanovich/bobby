@@ -8,12 +8,12 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.Version;
 import net.fabricmc.loader.api.VersionParsingException;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.Identifier;
 
 import java.util.Optional;
 
 public class SodiumConfigEntrypoint implements ConfigEntryPoint {
-    private static final Identifier SODIUM_RENDER_DISTANCE = Identifier.of("sodium:general.render_distance");
+    private static final Identifier SODIUM_RENDER_DISTANCE = Identifier.parse("sodium:general.render_distance");
 
     @Override
     public void registerConfigLate(ConfigBuilder configBuilder) {

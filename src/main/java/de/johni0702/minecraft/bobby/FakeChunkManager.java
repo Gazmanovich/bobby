@@ -98,11 +98,11 @@ public class FakeChunkManager {
 
         BobbyConfig config = Bobby.getInstance().getConfig();
 
-        String serverName = getCurrentWorldOrServerName(((ClientWorldAccessor) world).getNetworkHandler());
+        String serverName = getCurrentWorldOrServerName(((ClientWorldAccessor) world).getConnection());
         if (serverName.isEmpty()) {
             serverName = "<empty>";
         }
-        long seedHash = ((BiomeAccessAccessor) world.getBiomeManager()).getSeed();
+        long seedHash = ((BiomeAccessAccessor) world.getBiomeManager()).getBiomeZoomSeed();
         ResourceKey<Level> worldKey = world.dimension();
         Identifier worldId = worldKey.identifier();
         Path storagePath = client.gameDirectory
@@ -421,7 +421,7 @@ public class FakeChunkManager {
                 }
             };
             if (willBeReplaced) {
-                ClientPacketListener networkHandler = ((ClientWorldAccessor) world).getNetworkHandler();
+                ClientPacketListener networkHandler = ((ClientWorldAccessor) world).getConnection();
                 ClientPlayNetworkHandlerExt.get(networkHandler).bobby_queueUnloadFakeLightDataTask(() -> {
                     if (fakeChunks.containsKey(chunkPos)) {
                         // Real chunk has been unloaded in the meantime and is now a fake chunk again, that fake
