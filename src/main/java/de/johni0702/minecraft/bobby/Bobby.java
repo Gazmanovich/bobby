@@ -5,9 +5,9 @@ import de.johni0702.minecraft.bobby.commands.CreateWorldCommand;
 import de.johni0702.minecraft.bobby.commands.MergeWorldsCommand;
 import de.johni0702.minecraft.bobby.commands.UpgradeCommand;
 import de.johni0702.minecraft.bobby.commands.WorldsCommand;
-import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
-import de.johni0702.minecraft.bobby.mixin.SimpleOptionAccessor;
-import de.johni0702.minecraft.bobby.mixin.ValidatingIntSliderCallbacksAccessor;
+import de.johni0702.minecraft.bobby.ext.ClientChunkCacheExt;
+import de.johni0702.minecraft.bobby.mixin.OptionInstanceAccessor;
+import de.johni0702.minecraft.bobby.mixin.OptionInstanceIntRangeAccessor;
 import de.johni0702.minecraft.bobby.util.FlawlessFrames;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -227,7 +227,7 @@ public class Bobby implements ClientModInitializer {
                 return;
             }
 
-            FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) world.getChunkSource()).bobby_getFakeChunkManager();
+            FakeChunkManager bobbyChunkManager = ((ClientChunkCacheExt) world.getChunkSource()).bobby_getFakeChunkManager();
             if (bobbyChunkManager == null) {
                 return;
             }
@@ -262,13 +262,13 @@ public class Bobby implements ClientModInitializer {
 
             OptionInstance<Integer> viewDistance = client.options.renderDistance();
             if (viewDistance.values() instanceof OptionInstance.IntRange callbacks) {
-                ValidatingIntSliderCallbacksAccessor callbacksAcc = (ValidatingIntSliderCallbacksAccessor)(Object) callbacks;
+                OptionInstanceIntRangeAccessor callbacksAcc = (OptionInstanceIntRangeAccessor)(Object) callbacks;
                 if (increaseOnly) {
                     callbacksAcc.setMaxInclusive(Math.max(callbacks.maxInclusive(), newMaxRenderDistance));
                 } else {
                     callbacksAcc.setMaxInclusive(newMaxRenderDistance);
                 }
-                SimpleOptionAccessor<Integer> optionAccessor = (SimpleOptionAccessor<Integer>)(Object) viewDistance;
+                OptionInstanceAccessor<Integer> optionAccessor = (OptionInstanceAccessor<Integer>)(Object) viewDistance;
                 optionAccessor.setCodec(callbacks.codec());
             }
         }

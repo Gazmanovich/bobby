@@ -3,7 +3,7 @@ package de.johni0702.minecraft.bobby.mixin;
 import de.johni0702.minecraft.bobby.FakeChunkManager;
 import de.johni0702.minecraft.bobby.FakeChunkStorage;
 import de.johni0702.minecraft.bobby.Worlds;
-import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
+import de.johni0702.minecraft.bobby.ext.ClientChunkCacheExt;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Minecraft.class)
-public abstract class MinecraftClientMixin {
+public abstract class MinecraftMixin {
 
     @Shadow @Final public Options options;
 
@@ -30,7 +30,7 @@ public abstract class MinecraftClientMixin {
         if (level == null) {
             return;
         }
-        FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) level.getChunkSource()).bobby_getFakeChunkManager();
+        FakeChunkManager bobbyChunkManager = ((ClientChunkCacheExt) level.getChunkSource()).bobby_getFakeChunkManager();
         if (bobbyChunkManager == null) {
             return;
         }

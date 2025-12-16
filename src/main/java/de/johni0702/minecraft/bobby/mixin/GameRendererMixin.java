@@ -3,7 +3,7 @@ package de.johni0702.minecraft.bobby.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import de.johni0702.minecraft.bobby.FakeChunkManager;
-import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
+import de.johni0702.minecraft.bobby.ext.ClientChunkCacheExt;
 import de.johni0702.minecraft.bobby.ext.GameRendererExt;
 import de.johni0702.minecraft.bobby.util.FlawlessFrames;
 import net.minecraft.client.Camera;
@@ -41,7 +41,7 @@ public abstract class GameRendererMixin implements GameRendererExt {
             return;
         }
 
-        FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) world.getChunkSource()).bobby_getFakeChunkManager();
+        FakeChunkManager bobbyChunkManager = ((ClientChunkCacheExt) world.getChunkSource()).bobby_getFakeChunkManager();
         if (bobbyChunkManager == null) {
             return;
         }

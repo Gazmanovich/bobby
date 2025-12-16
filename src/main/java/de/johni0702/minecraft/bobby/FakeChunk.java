@@ -1,6 +1,6 @@
 package de.johni0702.minecraft.bobby;
 
-import de.johni0702.minecraft.bobby.ext.ChunkLightProviderExt;
+import de.johni0702.minecraft.bobby.ext.LightEngineExt;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
@@ -44,8 +44,8 @@ public class FakeChunk extends LevelChunk {
         LevelRenderer worldRenderer = client.levelRenderer;
 
         LevelLightEngine lightingProvider = getLevel().getLightEngine();
-        ChunkLightProviderExt blockLightProvider = ChunkLightProviderExt.get(lightingProvider.getLayerListener(LightLayer.BLOCK));
-        ChunkLightProviderExt skyLightProvider = ChunkLightProviderExt.get(lightingProvider.getLayerListener(LightLayer.SKY));
+        LightEngineExt blockLightProvider = LightEngineExt.get(lightingProvider.getLayerListener(LightLayer.BLOCK));
+        LightEngineExt skyLightProvider = LightEngineExt.get(lightingProvider.getLayerListener(LightLayer.SKY));
 
         int blockDelta = enabled ? 5 : 0;
         int skyDelta = enabled ? -3 + (int) (-7 * gamma) : 0;
@@ -59,7 +59,7 @@ public class FakeChunk extends LevelChunk {
         }
     }
 
-    private void updateTaintedState(ChunkLightProviderExt lightProvider, int x, int y, int z, int delta) {
+    private void updateTaintedState(LightEngineExt lightProvider, int x, int y, int z, int delta) {
         if (lightProvider == null) {
             return;
         }

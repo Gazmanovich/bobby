@@ -1,11 +1,11 @@
 package de.johni0702.minecraft.bobby;
 
-import de.johni0702.minecraft.bobby.ext.ChunkLightProviderExt;
-import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
-import de.johni0702.minecraft.bobby.ext.ClientPlayNetworkHandlerExt;
-import de.johni0702.minecraft.bobby.ext.LightingProviderExt;
-import de.johni0702.minecraft.bobby.mixin.BiomeAccessAccessor;
-import de.johni0702.minecraft.bobby.mixin.ClientWorldAccessor;
+import de.johni0702.minecraft.bobby.ext.LightEngineExt;
+import de.johni0702.minecraft.bobby.ext.ClientChunkCacheExt;
+import de.johni0702.minecraft.bobby.ext.ClientPacketListenerExt;
+import de.johni0702.minecraft.bobby.ext.LevelLightEngineExt;
+import de.johni0702.minecraft.bobby.mixin.BiomeManagerAccessor;
+import de.johni0702.minecraft.bobby.mixin.ClientLevelAccessor;
 import de.johni0702.minecraft.bobby.util.FileSystemUtils;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import it.unimi.dsi.fastutil.longs.Long2LongMap;
@@ -64,7 +64,7 @@ public class FakeChunkManager {
 
     private final ClientLevel world;
     private final ClientChunkCache clientChunkManager;
-    private final ClientChunkManagerExt clientChunkManagerExt;
+    private final ClientChunkCacheExt clientChunkCacheExt;
     private final Worlds worlds;
     private final FakeChunkStorage storage;
     private final List<Function<ChunkPos, CompletableFuture<Optional<CompoundTag>>>> storages = new ArrayList<>();
@@ -94,15 +94,15 @@ public class FakeChunkManager {
     public FakeChunkManager(ClientLevel world, ClientChunkCache clientChunkManager) {
         this.world = world;
         this.clientChunkManager = clientChunkManager;
-        this.clientChunkManagerExt = (ClientChunkManagerExt) clientChunkManager;
+        this.clientChunkCacheExt = (ClientChunkCacheExt) clientChunkManager;
 
         BobbyConfig config = Bobby.getInstance().getConfig();
 
-        String serverName = getCurrentWorldOrServerName(((ClientWorldAccessor) world).getConnection());
+        String serverName = getCurrentWorldOrServerName(((ClientLevelAccessor) world).getConnection());
         if (serverName.isEmpty()) {
             serverName = "<empty>";
         }
-        long seedHash = ((BiomeAccessAccessor) world.getBiomeManager()).getBiomeZoomSeed();
+        long seedHash = ((BiomeManagerAccessor) world.getBiomeManager()).getBiomeZoomSeed();
         ResourceKey<Level> worldKey = world.dimension();
         Identifier worldId = worldKey.identifier();
         Path storagePath = client.gameDirectory
@@ -380,7 +380,7 @@ public class FakeChunkManager {
             world.setSectionDirtyWithNeighbors(x, i, z);
         }
 
-        clientChunkManagerExt.bobby_onFakeChunkAdded(x, z);
+        clientChunkCacheExt.bobby_onFakeChunkAdded(x, z);
     }
 
     public void loadEmptySectionsOfFakeChunk(int x, int z, LevelChunk chunk) {
@@ -402,11 +402,11 @@ public class FakeChunkManager {
             chunk.clearAllBlockEntities();
 
             LevelLightEngine lightingProvider = clientChunkManager.getLightEngine();
-            LightingProviderExt lightingProviderExt = LightingProviderExt.get(lightingProvider);
-            ChunkLightProviderExt blockLightProvider = ChunkLightProviderExt.get(lightingProvider.getLayerListener(LightLayer.BLOCK));
-            ChunkLightProviderExt skyLightProvider = ChunkLightProviderExt.get(lightingProvider.getLayerListener(LightLayer.SKY));
+            LevelLightEngineExt levelLightEngineExt = LevelLightEngineExt.get(lightingProvider);
+            LightEngineExt blockLightProvider = LightEngineExt.get(lightingProvider.getLayerListener(LightLayer.BLOCK));
+            LightEngineExt skyLightProvider = LightEngineExt.get(lightingProvider.getLayerListener(LightLayer.SKY));
 
-            lightingProviderExt.bobby_disableColumn(SectionPos.getZeroNode(x, z));
+            levelLightEngineExt.bobby_disableColumn(SectionPos.getZeroNode(x, z));
 
             // See the comment above the bobby_queueUnloadFakeLightDataTask implementation
             Runnable unloadLightData = () -> {
@@ -421,8 +421,8 @@ public class FakeChunkManager {
                 }
             };
             if (willBeReplaced) {
-                ClientPacketListener networkHandler = ((ClientWorldAccessor) world).getConnection();
-                ClientPlayNetworkHandlerExt.get(networkHandler).bobby_queueUnloadFakeLightDataTask(() -> {
+                ClientPacketListener networkHandler = ((ClientLevelAccessor) world).getConnection();
+                ClientPacketListenerExt.get(networkHandler).bobby_queueUnloadFakeLightDataTask(() -> {
                     if (fakeChunks.containsKey(chunkPos)) {
                         // Real chunk has been unloaded in the meantime and is now a fake chunk again, that fake
                         // chunk will have loaded its own fake light, so we shouldn't unload it.
@@ -440,7 +440,7 @@ public class FakeChunkManager {
                 }
             }
 
-            clientChunkManagerExt.bobby_onFakeChunkRemoved(x, z, willBeReplaced);
+            clientChunkCacheExt.bobby_onFakeChunkRemoved(x, z, willBeReplaced);
 
             return true;
         }

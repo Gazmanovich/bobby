@@ -5,7 +5,7 @@ import com.mojang.brigadier.context.CommandContext;
 import de.johni0702.minecraft.bobby.FakeChunkManager;
 import de.johni0702.minecraft.bobby.FakeChunkStorage;
 import de.johni0702.minecraft.bobby.Worlds;
-import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
+import de.johni0702.minecraft.bobby.ext.ClientChunkCacheExt;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -23,7 +23,7 @@ public class UpgradeCommand implements Command<FabricClientCommandSource> {
         Minecraft client = source.getClient();
         ClientLevel world = source.getWorld();
 
-        ClientChunkManagerExt chunkManager = (ClientChunkManagerExt) world.getChunkSource();
+        ClientChunkCacheExt chunkManager = (ClientChunkCacheExt) world.getChunkSource();
         FakeChunkManager bobbyChunkManager = chunkManager.bobby_getFakeChunkManager();
         if (bobbyChunkManager == null) {
             source.sendError(Component.translatable("bobby.upgrade.not_enabled"));

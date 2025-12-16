@@ -6,7 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 @Mixin(FogRenderer.class)
-public abstract class BackgroundRendererMixin {
+public abstract class FogRendererMixin {
     @ModifyVariable(method = "computeFogColor", at = @At("HEAD"), argsOnly = true)
     private int clampMaxValue(int viewDistance) {
         return Math.min(viewDistance, 32);

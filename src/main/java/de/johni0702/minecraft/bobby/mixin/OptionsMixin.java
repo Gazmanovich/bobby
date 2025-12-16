@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Options.class)
-public class GameOptionsMixin {
+public class OptionsMixin {
     @Shadow
     private @Final OptionInstance<Integer> renderDistance;
 
