@@ -12,12 +12,12 @@ import de.johni0702.minecraft.bobby.util.FlawlessFrames;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.option.SimpleOption;
-import net.minecraft.client.world.ClientWorld;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.OptionInstance;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Util;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.spongepowered.configurate.CommentedConfigurationNode;
@@ -48,7 +48,7 @@ public class Bobby implements ClientModInitializer {
         return instance;
     }
 
-    private static final MinecraftClient client = MinecraftClient.getInstance();
+    private static final Minecraft client = Minecraft.getInstance();
 
     private ValueReference<BobbyConfig, CommentedConfigurationNode> configReference;
 
@@ -82,7 +82,7 @@ public class Bobby implements ClientModInitializer {
         configReference.subscribe(new TaintChunksConfigHandler()::update);
         configReference.subscribe(new MaxRenderDistanceConfigHandler()::update);
 
-        Util.getIoWorkerExecutor().execute(this::cleanupOldWorlds);
+        Util.ioPool().execute(this::cleanupOldWorlds);
     }
 
     public BobbyConfig getConfig() {
@@ -93,7 +93,7 @@ public class Bobby implements ClientModInitializer {
         BobbyConfig config = getConfig();
         return config.isEnabled()
                 // For singleplayer, disable ourselves unless the view-distance overwrite is active.
-                && (client.getServer() == null || config.getViewDistanceOverwrite() != 0);
+                && (client.getSingleplayerServer() == null || config.getViewDistanceOverwrite() != 0);
     }
 
     public Screen createConfigScreen(Screen parent) {
@@ -109,7 +109,7 @@ public class Bobby implements ClientModInitializer {
             return;
         }
 
-        Path basePath = client.runDirectory.toPath().resolve(".bobby");
+        Path basePath = client.gameDirectory.toPath().resolve(".bobby");
 
         List<Path> toBeDeleted;
         try (Stream<Path> stream = Files.walk(basePath, 4)) {
@@ -222,17 +222,17 @@ public class Bobby implements ClientModInitializer {
             }
             wasEnabled = enabled;
 
-            ClientWorld world = client.world;
+            ClientLevel world = client.level;
             if (world == null) {
                 return;
             }
 
-            FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) world.getChunkManager()).bobby_getFakeChunkManager();
+            FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) world.getChunkSource()).bobby_getFakeChunkManager();
             if (bobbyChunkManager == null) {
                 return;
             }
 
-            for (WorldChunk fakeChunk : bobbyChunkManager.getFakeChunks()) {
+            for (LevelChunk fakeChunk : bobbyChunkManager.getFakeChunks()) {
                 ((FakeChunk) fakeChunk).setTainted(enabled);
             }
         }
@@ -260,8 +260,8 @@ public class Bobby implements ClientModInitializer {
             }
             oldMaxRenderDistance = newMaxRenderDistance;
 
-            SimpleOption<Integer> viewDistance = client.options.getViewDistance();
-            if (viewDistance.getCallbacks() instanceof SimpleOption.ValidatingIntSliderCallbacks callbacks) {
+            OptionInstance<Integer> viewDistance = client.options.renderDistance();
+            if (viewDistance.values() instanceof OptionInstance.IntRange callbacks) {
                 ValidatingIntSliderCallbacksAccessor callbacksAcc = (ValidatingIntSliderCallbacksAccessor)(Object) callbacks;
                 if (increaseOnly) {
                     callbacksAcc.setMaxInclusive(Math.max(callbacks.maxInclusive(), newMaxRenderDistance));

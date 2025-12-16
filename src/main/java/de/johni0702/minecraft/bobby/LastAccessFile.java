@@ -6,9 +6,9 @@ import it.unimi.dsi.fastutil.longs.Long2LongMap;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongList;
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.util.Util;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.level.ChunkPos;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,14 +69,14 @@ public class LastAccessFile implements Closeable {
 
     public void touchRegion(int x, int z) {
         synchronized (accessMap) {
-            accessMap.put(ChunkPos.toLong(x, z), now);
+            accessMap.put(ChunkPos.asLong(x, z), now);
         }
     }
 
     private void scheduleSave() {
         if (closed) return;
 
-        Util.getIoWorkerExecutor().execute(this::saveOrLog);
+        Util.ioPool().execute(this::saveOrLog);
 
         CompletableFuture.delayedExecutor(1, TimeUnit.MINUTES).execute(this::scheduleSave);
     }
@@ -92,18 +92,18 @@ public class LastAccessFile implements Closeable {
     private synchronized void save() throws IOException {
         if (closed) return;
 
-        PacketByteBuf buf;
+        FriendlyByteBuf buf;
         synchronized (accessMap) {
             now = timestampSeconds(); // regularly update the time
 
-            buf = new PacketByteBuf(Unpooled.buffer(accessMap.size() * 16));
+            buf = new FriendlyByteBuf(Unpooled.buffer(accessMap.size() * 16));
 
             // We are storing the most recent access time right at the start, so we can quickly scan all worlds
             buf.writeVarLong(accessMap.values().longStream().max().orElse(0));
 
             for (Long2LongMap.Entry entry : accessMap.long2LongEntrySet()) {
-                buf.writeVarInt(ChunkPos.getPackedX(entry.getLongKey()));
-                buf.writeVarInt(ChunkPos.getPackedZ(entry.getLongKey()));
+                buf.writeVarInt(ChunkPos.getX(entry.getLongKey()));
+                buf.writeVarInt(ChunkPos.getZ(entry.getLongKey()));
                 buf.writeVarLong(entry.getLongValue());
             }
         }
@@ -122,12 +122,12 @@ public class LastAccessFile implements Closeable {
     private static Long2LongMap read(Path path) throws IOException {
         Long2LongMap map = new Long2LongOpenHashMap();
         if (Files.exists(path)) {
-            PacketByteBuf buf = new PacketByteBuf(Unpooled.wrappedBuffer(Files.readAllBytes(path)));
+            FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(Files.readAllBytes(path)));
             buf.readVarLong(); // most recent timestamp
             while (buf.isReadable()) {
                 int x = buf.readVarInt();
                 int z = buf.readVarInt();
-                map.put(ChunkPos.toLong(x, z), buf.readVarLong());
+                map.put(ChunkPos.asLong(x, z), buf.readVarLong());
             }
         }
         return map;
@@ -179,12 +179,12 @@ public class LastAccessFile implements Closeable {
                 }
             }
         }
-        long mostRecentTimestamp = new PacketByteBuf(buffer).readVarLong();
+        long mostRecentTimestamp = new FriendlyByteBuf(buffer).readVarLong();
 
         return mostRecentTimestamp <= timestampSeconds() - days * 24 * 60 * 60;
     }
 
     private static long timestampSeconds() {
-        return Util.getEpochTimeMs() / 1000;
+        return Util.getEpochMillis() / 1000;
     }
 }

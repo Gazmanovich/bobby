@@ -6,14 +6,14 @@ import de.johni0702.minecraft.bobby.FakeChunkManager;
 import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
 import de.johni0702.minecraft.bobby.ext.GameRendererExt;
 import de.johni0702.minecraft.bobby.util.FlawlessFrames;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.Camera;
-import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.client.render.fog.FogRenderer;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.util.profiler.Profiler;
-import net.minecraft.util.profiler.Profilers;
+import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.fog.FogRenderer;
+import net.minecraft.util.profiling.Profiler;
+import net.minecraft.util.profiling.ProfilerFiller;
 import org.joml.Vector4f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,25 +28,25 @@ public abstract class GameRendererMixin implements GameRendererExt {
 
     @Shadow
     @Final
-    private MinecraftClient client;
+    private Minecraft minecraft;
 
-    @Inject(method = "renderWorld", at = @At("HEAD"))
+    @Inject(method = "renderLevel", at = @At("HEAD"))
     private void blockingBobbyUpdate(CallbackInfo ci) {
         if (!FlawlessFrames.isActive()) {
             return;
         }
 
-        ClientWorld world = this.client.world;
+        ClientLevel world = this.minecraft.level;
         if (world == null) {
             return;
         }
 
-        FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) world.getChunkManager()).bobby_getFakeChunkManager();
+        FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) world.getChunkSource()).bobby_getFakeChunkManager();
         if (bobbyChunkManager == null) {
             return;
         }
 
-        Profiler profiler = Profilers.get();
+        ProfilerFiller profiler = Profiler.get();
         profiler.push("bobbyUpdate");
 
         bobbyChunkManager.update(true, () -> true);
@@ -62,17 +62,17 @@ public abstract class GameRendererMixin implements GameRendererExt {
         return skyFogRenderer;
     }
 
-    @WrapOperation(method = "renderWorld", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/fog/FogRenderer;applyFog(Lnet/minecraft/client/render/Camera;ILnet/minecraft/client/render/RenderTickCounter;FLnet/minecraft/client/world/ClientWorld;)Lorg/joml/Vector4f;"))
-    private Vector4f updateSkyFogRenderer(FogRenderer instance, Camera camera, int viewDistance, RenderTickCounter tickCounter, float skyDarkness, ClientWorld world, Operation<Vector4f> operation) {
+    @WrapOperation(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/fog/FogRenderer;setupFog(Lnet/minecraft/client/Camera;ILnet/minecraft/client/DeltaTracker;FLnet/minecraft/client/multiplayer/ClientLevel;)Lorg/joml/Vector4f;"))
+    private Vector4f updateSkyFogRenderer(FogRenderer instance, Camera camera, int viewDistance, DeltaTracker tickCounter, float skyDarkness, ClientLevel world, Operation<Vector4f> operation) {
         if (viewDistance >= 32) {
-            skyFogRenderer.applyFog(camera, 32, tickCounter, skyDarkness, world);
+            skyFogRenderer.setupFog(camera, 32, tickCounter, skyDarkness, world);
         }
         return operation.call(instance, camera, viewDistance, tickCounter, skyDarkness, world);
     }
 
-    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/fog/FogRenderer;rotate()V"))
+    @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/fog/FogRenderer;endFrame()V"))
     private void rotateSkyFogRenderer(CallbackInfo ci) {
-        skyFogRenderer.rotate();
+        skyFogRenderer.endFrame();
     }
 
     @Inject(method = "close", at = @At("RETURN"))

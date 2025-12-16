@@ -2,9 +2,9 @@ package de.johni0702.minecraft.bobby.mixin;
 
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import de.johni0702.minecraft.bobby.ext.GameRendererExt;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.WorldRenderer;
-import net.minecraft.client.render.fog.FogRenderer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.fog.FogRenderer;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -12,16 +12,16 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-@Mixin(WorldRenderer.class)
+@Mixin(LevelRenderer.class)
 public abstract class WorldRendererMixin {
-    @Shadow public abstract double getViewDistance();
+    @Shadow public abstract double getLastViewDistance();
 
-    @Shadow @Final private MinecraftClient client;
+    @Shadow @Final private Minecraft minecraft;
 
-    @ModifyArg(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/WorldRenderer;renderSky(Lnet/minecraft/client/render/FrameGraphBuilder;Lnet/minecraft/client/render/Camera;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;)V"))
+    @ModifyArg(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;addSkyPass(Lcom/mojang/blaze3d/framegraph/FrameGraphBuilder;Lnet/minecraft/client/Camera;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;)V"))
     private GpuBufferSlice clampMaxValue(GpuBufferSlice fogBuffer) {
-        if (getViewDistance() >= 32) {
-            fogBuffer = ((GameRendererExt) client.gameRenderer).bobby_getSkyFogRenderer().getFogBuffer(FogRenderer.FogType.WORLD);
+        if (getLastViewDistance() >= 32) {
+            fogBuffer = ((GameRendererExt) minecraft.gameRenderer).bobby_getSkyFogRenderer().getBuffer(FogRenderer.FogMode.WORLD);
         }
         return fogBuffer;
     }

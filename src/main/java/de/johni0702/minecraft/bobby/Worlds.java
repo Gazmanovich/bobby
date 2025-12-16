@@ -26,17 +26,17 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.SharedConstants;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
+import net.minecraft.client.Minecraft;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.text.Text;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Util;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.storage.StorageIoWorker;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.storage.IOWorker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,8 +69,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static net.minecraft.text.Text.literal;
-import static net.minecraft.text.Text.translatable;
+import static net.minecraft.network.chat.Component.literal;
+import static net.minecraft.network.chat.Component.translatable;
 
 public class Worlds implements AutoCloseable {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -79,14 +79,14 @@ public class Worlds implements AutoCloseable {
     private static final int CONCURRENT_COPY_JOBS = 10;
     private static final int MATCH_THRESHOLD = 10;
     private static final int MISMATCH_THRESHOLD = 100;
-    private static final int CURRENT_SAVE_VERSION = SharedConstants.getGameVersion().dataVersion().id();
+    private static final int CURRENT_SAVE_VERSION = SharedConstants.getCurrentVersion().dataVersion().version();
 
     // Executor for saving. Single-threaded so we do not have to worry about races between multiple saves.
     private static final ExecutorService saveExecutor = Executors.newSingleThreadExecutor(new DefaultThreadFactory("bobby-meta-saving", true));
 
-    private static final Executor regionLoadingExecutor = new LimitedExecutor(Util.getIoWorkerExecutor(), CONCURRENT_REGION_LOADING_JOBS);
-    private static final Executor computeFingerprintExecutor = new LimitedExecutor(Util.getIoWorkerExecutor(), CONCURRENT_FINGERPRINT_JOBS);
-    private static final LimitedExecutor copyExecutor = new LimitedExecutor(Util.getIoWorkerExecutor(), CONCURRENT_COPY_JOBS);
+    private static final Executor regionLoadingExecutor = new LimitedExecutor(Util.ioPool(), CONCURRENT_REGION_LOADING_JOBS);
+    private static final Executor computeFingerprintExecutor = new LimitedExecutor(Util.ioPool(), CONCURRENT_FINGERPRINT_JOBS);
+    private static final LimitedExecutor copyExecutor = new LimitedExecutor(Util.ioPool(), CONCURRENT_COPY_JOBS);
 
     private static final Map<Path, Worlds> active = new HashMap<>();
 
@@ -148,9 +148,9 @@ public class Worlds implements AutoCloseable {
         load(readFromDisk());
 
         if (!outdatedWorlds.isEmpty()) {
-            Text text = translatable("bobby.upgrade.required");
-            MinecraftClient client = MinecraftClient.getInstance();
-            client.execute(() -> client.inGameHud.getChatHud().addMessage(text));
+            Component text = translatable("bobby.upgrade.required");
+            Minecraft client = Minecraft.getInstance();
+            client.execute(() -> client.gui.getChat().addMessage(text));
         }
     }
 
@@ -171,13 +171,13 @@ public class Worlds implements AutoCloseable {
         }
     }
 
-    public CompletableFuture<Optional<NbtCompound>> loadTag(ChunkPos chunkPos) {
+    public CompletableFuture<Optional<CompoundTag>> loadTag(ChunkPos chunkPos) {
         RegionPos regionPos = RegionPos.from(chunkPos);
         long regionCoord = regionPos.toLong();
         long chunkCoord = chunkPos.toLong();
 
         IntList worldsToLoad = null;
-        List<CompletableFuture<Optional<NbtCompound>>> unknownAgeResults = null;
+        List<CompletableFuture<Optional<CompoundTag>>> unknownAgeResults = null;
         World knownBestWorld = null;
         long knownBestAge = -1;
 
@@ -263,17 +263,17 @@ public class Worlds implements AutoCloseable {
             // Final copies, even though they are effectively final at this point...
             World fKnownBestWorld = knownBestWorld;
             long fKnownBestAge = knownBestAge;
-            List<CompletableFuture<Optional<NbtCompound>>> fUnknownAgeResults = unknownAgeResults;
+            List<CompletableFuture<Optional<CompoundTag>>> fUnknownAgeResults = unknownAgeResults;
 
             return allDone.thenCompose(__ -> {
-                NbtCompound bestResult = null;
+                CompoundTag bestResult = null;
                 long bestAge = -1;
 
                 // Find the most recent one
-                for (CompletableFuture<Optional<NbtCompound>> future : fUnknownAgeResults) {
-                    NbtCompound result = future.join().orElse(null);
+                for (CompletableFuture<Optional<CompoundTag>> future : fUnknownAgeResults) {
+                    CompoundTag result = future.join().orElse(null);
                     if (result != null) {
-                        long age = result.getLong("age", 0);
+                        long age = result.getLongOr("age", 0);
                         if (age > bestAge) {
                             bestAge = age;
                             bestResult = result;
@@ -295,12 +295,12 @@ public class Worlds implements AutoCloseable {
     }
 
     public FakeChunkStorage getCurrentStorage() {
-        assert MinecraftClient.getInstance().isOnThread();
+        assert Minecraft.getInstance().isSameThread();
         return worlds.get(currentWorldId).storage;
     }
 
     public List<FakeChunkStorage> getOutdatedWorlds() {
-        assert MinecraftClient.getInstance().isOnThread();
+        assert Minecraft.getInstance().isSameThread();
         return outdatedWorlds.stream().map(it -> it.storage).collect(Collectors.toList());
     }
 
@@ -330,13 +330,13 @@ public class Worlds implements AutoCloseable {
             lock.readLock().unlock();
         }
         return CompletableFuture.allOf(worlds.stream()
-                .map(it -> it.storage.completeAll(true))
+                .map(it -> it.storage.synchronize(true))
                 .toArray(CompletableFuture[]::new));
     }
 
     @Override
     public void close() throws IOException {
-        assert MinecraftClient.getInstance().isOnThread();
+        assert Minecraft.getInstance().isSameThread();
 
         lock.writeLock().lock();
         try {
@@ -353,7 +353,7 @@ public class Worlds implements AutoCloseable {
     }
 
     public boolean update() {
-        assert MinecraftClient.getInstance().isOnThread();
+        assert Minecraft.getInstance().isSameThread();
         lock.writeLock().lock();
         try {
             return updateWithLock();
@@ -527,8 +527,8 @@ public class Worlds implements AutoCloseable {
 
                 case BlockedByPreviouslyQueuedWrites -> {
                     state.stage = MergeStage.WaitForPreviouslyQueuedWrites;
-                    Util.getIoWorkerExecutor().execute(() -> {
-                        sourceWorld.storage.completeAll(true).join();
+                    Util.ioPool().execute(() -> {
+                        sourceWorld.storage.synchronize(true).join();
                         state.stage = MergeStage.Idle;
                     });
                 }
@@ -540,7 +540,7 @@ public class Worlds implements AutoCloseable {
                 case Idle -> {
                     if (sourceWorld.knownRegions.isEmpty()) {
                         state.stage = MergeStage.DeleteSourceStorage;
-                        Util.getIoWorkerExecutor().execute(() -> {
+                        Util.ioPool().execute(() -> {
                             Path directory = sourceWorld.directory();
                             try {
                                 sourceWorld.storage.close();
@@ -633,8 +633,8 @@ public class Worlds implements AutoCloseable {
 
                     if (state.activeJobs.isEmpty()) {
                         state.stage = MergeStage.Syncing;
-                        Util.getIoWorkerExecutor().execute(() -> {
-                            targetWorld.storage.completeAll(true).join();
+                        Util.ioPool().execute(() -> {
+                            targetWorld.storage.synchronize(true).join();
                             state.stage = MergeStage.WriteTargetMeta;
                         });
                     } else {
@@ -701,7 +701,7 @@ public class Worlds implements AutoCloseable {
     }
 
     private void processWorkQueue() {
-        assert MinecraftClient.getInstance().isOnThread();
+        assert Minecraft.getInstance().isSameThread();
         while (true) {
             if (workQueueBlockedOn != null) {
                 if (!workQueueBlockedOn.isDone()) {
@@ -723,7 +723,7 @@ public class Worlds implements AutoCloseable {
     }
 
     public void runOrScheduleWork(Supplier<Future<?>> work) {
-        assert MinecraftClient.getInstance().isOnThread();
+        assert Minecraft.getInstance().isSameThread();
         if (workQueue.isEmpty()) {
             lock.writeLock().lock();
             try {
@@ -741,7 +741,7 @@ public class Worlds implements AutoCloseable {
     }
 
     /** Re-checks all visible chunks for matching fingerprints. Used after upgrading worlds to match against them. */
-    public void recheckChunks(net.minecraft.world.World mcWorld, VisibleChunksTracker tracker) {
+    public void recheckChunks(net.minecraft.world.level.Level mcWorld, VisibleChunksTracker tracker) {
         // Wrapped to wait for all pending fingerprint updates to be committed, so we don't overwrite them
         runOrScheduleWork(() -> {
             tracker.forEach(chunkCoord -> {
@@ -766,12 +766,12 @@ public class Worlds implements AutoCloseable {
         });
     }
 
-    public void observeChunk(net.minecraft.world.World mcWorld, ChunkPos chunkPos, long fingerprint) {
-        assert MinecraftClient.getInstance().isOnThread();
+    public void observeChunk(net.minecraft.world.level.Level mcWorld, ChunkPos chunkPos, long fingerprint) {
+        assert Minecraft.getInstance().isSameThread();
         runOrScheduleWork(() -> tryObserveChunk(mcWorld, chunkPos, fingerprint));
     }
 
-    private CompletableFuture<?> tryObserveChunk(net.minecraft.world.World mcWorld, ChunkPos chunkPos, long fingerprint) {
+    private CompletableFuture<?> tryObserveChunk(net.minecraft.world.level.Level mcWorld, ChunkPos chunkPos, long fingerprint) {
         assert lock.isWriteLockedByCurrentThread();
 
         World currentWorld = worlds.get(currentWorldId);
@@ -884,7 +884,7 @@ public class Worlds implements AutoCloseable {
         }
     }
 
-    private CompletableFuture<?> computeLegacyFingerprint(World world, ChunkPos chunkPos, net.minecraft.world.World mcWorld) {
+    private CompletableFuture<?> computeLegacyFingerprint(World world, ChunkPos chunkPos, net.minecraft.world.level.Level mcWorld) {
         ComputeLegacyFingerprintJob newJob = new ComputeLegacyFingerprintJob(world, chunkPos, mcWorld);
         ComputeLegacyFingerprintJob existingJob = computeLegacyFingerprintJobs.addOrGet(newJob);
         if (existingJob != newJob) {
@@ -916,7 +916,7 @@ public class Worlds implements AutoCloseable {
                 }
                 region.dirty = false;
 
-                NbtCompound nbt = region.saveToNbt();
+                CompoundTag nbt = region.saveToNbt();
                 saveExecutor.execute(() -> {
                     RegionPos regionPos = RegionPos.fromLong(regionCoord);
                     try {
@@ -930,7 +930,7 @@ public class Worlds implements AutoCloseable {
 
         if (metaDirty) {
             metaDirty = false;
-            NbtCompound nbt = saveToNbt();
+            CompoundTag nbt = saveToNbt();
             saveExecutor.execute(() -> {
                 try {
                     writeToDisk(nbt);
@@ -941,10 +941,10 @@ public class Worlds implements AutoCloseable {
         }
     }
 
-    private NbtCompound readFromDisk() {
+    private CompoundTag readFromDisk() {
         if (Files.exists(metaFile)) {
             try (InputStream in = Files.newInputStream(metaFile)) {
-                return NbtIo.readCompressed(in, NbtSizeTracker.ofUnlimitedBytes());
+                return NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap());
             } catch (IOException e) {
                 LOGGER.error("Failed to read " + metaFile, e);
             }
@@ -952,7 +952,7 @@ public class Worlds implements AutoCloseable {
         return null;
     }
 
-    private void writeToDisk(NbtCompound nbt) throws IOException {
+    private void writeToDisk(CompoundTag nbt) throws IOException {
         Files.createDirectories(directory);
 
         Path tmpFile = Files.createTempFile(directory, "worlds", ".meta");
@@ -966,23 +966,23 @@ public class Worlds implements AutoCloseable {
         }
     }
 
-    private NbtCompound saveToNbt() {
-        NbtCompound root = new NbtCompound();
-        NbtList worldsNbt = new NbtList();
+    private CompoundTag saveToNbt() {
+        CompoundTag root = new CompoundTag();
+        ListTag worldsNbt = new ListTag();
         for (World world : Iterables.concat(worlds.values(), outdatedWorlds)) {
-            NbtCompound worldNbt = new NbtCompound();
+            CompoundTag worldNbt = new CompoundTag();
             worldNbt.putInt("id", world.id);
             worldNbt.putInt("version", world.version);
             worldNbt.putLongArray("regions", world.knownRegions.toLongArray());
             if (world.mergingIntoWorld != -1) {
                 worldNbt.putInt("merging_into", world.mergingIntoWorld);
             }
-            NbtList matchesNbt = new NbtList();
+            ListTag matchesNbt = new ListTag();
             for (Int2ObjectMap.Entry<Match> entry : world.matchingWorlds.int2ObjectEntrySet()) {
                 int otherWorldId = entry.getIntKey();
                 Match match = entry.getValue();
 
-                NbtCompound matchNbt = new NbtCompound();
+                CompoundTag matchNbt = new CompoundTag();
                 matchNbt.putInt("world", otherWorldId);
                 matchNbt.putLongArray("matching", match.matching.toLongArray());
                 matchNbt.putLongArray("mismatching", match.mismatching.toLongArray());
@@ -997,7 +997,7 @@ public class Worlds implements AutoCloseable {
         return root;
     }
 
-    private void load(NbtCompound root) {
+    private void load(CompoundTag root) {
         if (root == null && !Files.exists(directory)) {
             nextWorldId = 1;
         } else if (root == null) {
@@ -1029,15 +1029,15 @@ public class Worlds implements AutoCloseable {
 
             nextWorldId = outdatedWorlds.stream().mapToInt(it -> it.id).max().orElse(0) + 1;
         } else {
-            for (NbtElement worldNbtElement : root.getListOrEmpty("worlds")) {
-                NbtCompound worldNbt = (NbtCompound) worldNbtElement;
+            for (Tag worldNbtElement : root.getListOrEmpty("worlds")) {
+                CompoundTag worldNbt = (CompoundTag) worldNbtElement;
                 int id = worldNbt.getInt("id").orElseThrow();
                 int version = worldNbt.getInt("version").orElseThrow();
                 World world = new World(id, version);
                 world.knownRegions.addAll(LongArrayList.wrap(worldNbt.getLongArray("regions").orElseThrow()));
                 worldNbt.getInt("merging_into").ifPresent(it -> world.mergingIntoWorld = it);
-                for (NbtElement matchNbtElement : worldNbt.getList("matches").orElseThrow()) {
-                    NbtCompound matchNbt = (NbtCompound) matchNbtElement;
+                for (Tag matchNbtElement : worldNbt.getList("matches").orElseThrow()) {
+                    CompoundTag matchNbt = (CompoundTag) matchNbtElement;
                     int otherWorldId = matchNbt.getInt("world").orElseThrow();
                     Match match = new Match(
                             new LongOpenHashSet(matchNbt.getLongArray("matching").orElseThrow()),
@@ -1062,7 +1062,7 @@ public class Worlds implements AutoCloseable {
                 }
             }
 
-            nextWorldId = root.getInt("next_world", 0);
+            nextWorldId = root.getIntOr("next_world", 0);
         }
 
         World currentWorld;
@@ -1233,7 +1233,7 @@ public class Worlds implements AutoCloseable {
             if (!futures.isEmpty()) {
                 source.sendFeedback(translatable("Loading %s regions.. (run `/bobby worlds` to see progress)", futures.size()));
                 CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-                        .thenRunAsync(() -> sendInfo(source, true), MinecraftClient.getInstance());
+                        .thenRunAsync(() -> sendInfo(source, true), Minecraft.getInstance());
                 return;
             }
 
@@ -1251,7 +1251,7 @@ public class Worlds implements AutoCloseable {
             if (!futures.isEmpty()) {
                 source.sendFeedback(translatable("Computing fingerprints for %s chunks.. (run `/bobby worlds` to see progress)", futures.size()));
                 CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-                        .thenRunAsync(() -> sendInfo(source, false), MinecraftClient.getInstance());
+                        .thenRunAsync(() -> sendInfo(source, false), Minecraft.getInstance());
             }
         } else {
             source.sendFeedback(translatable("Run `/bobby worlds full` to load non-loaded regions and compute the state of currently unknown chunks."));
@@ -1377,7 +1377,7 @@ public class Worlds implements AutoCloseable {
             return future;
         }
 
-        public void writeRegionToDisk(RegionPos regionPos, NbtCompound nbt) throws IOException {
+        public void writeRegionToDisk(RegionPos regionPos, CompoundTag nbt) throws IOException {
             Files.createDirectories(directory);
 
             Path tmpFile = Files.createTempFile(directory, "region", ".meta");
@@ -1408,9 +1408,9 @@ public class Worlds implements AutoCloseable {
                 return region;
             }
 
-            NbtCompound root;
+            CompoundTag root;
             try (InputStream in = Files.newInputStream(file)) {
-                root = NbtIo.readCompressed(in, NbtSizeTracker.ofUnlimitedBytes());
+                root = NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap());
             }
 
             long[] chunkCoords = root.getLongArray("chunk_coords").orElseGet(() -> new long[0]);
@@ -1423,7 +1423,7 @@ public class Worlds implements AutoCloseable {
             return region;
         }
 
-        public NbtCompound saveToNbt() {
+        public CompoundTag saveToNbt() {
             long[] chunkCoords = new long[chunks.size()];
             long[] chunkAges = new long[chunkCoords.length];
             long[] chunkFingerprints = new long[chunkCoords.length];
@@ -1437,7 +1437,7 @@ public class Worlds implements AutoCloseable {
                 i++;
             }
 
-            NbtCompound root = new NbtCompound();
+            CompoundTag root = new CompoundTag();
             root.putLongArray("chunk_coords", chunkCoords);
             root.putLongArray("chunk_ages", chunkAges);
             root.putLongArray("chunk_fingerprints", chunkFingerprints);
@@ -1502,11 +1502,11 @@ public class Worlds implements AutoCloseable {
     private static class ComputeLegacyFingerprintJob implements Runnable {
         private final World world;
         private final ChunkPos chunkPos;
-        private final net.minecraft.world.World mcWorld;
+        private final net.minecraft.world.level.Level mcWorld;
         private final CompletableFuture<Long> future = new CompletableFuture<>();
         private volatile Long result;
 
-        private ComputeLegacyFingerprintJob(World world, ChunkPos chunkPos, net.minecraft.world.World mcWorld) {
+        private ComputeLegacyFingerprintJob(World world, ChunkPos chunkPos, net.minecraft.world.level.Level mcWorld) {
             this.world = world;
             this.chunkPos = chunkPos;
             this.mcWorld = mcWorld;
@@ -1514,13 +1514,13 @@ public class Worlds implements AutoCloseable {
 
         @Override
         public void run() {
-            NbtCompound nbt = world.storage.loadTag(chunkPos).join().orElse(null);
+            CompoundTag nbt = world.storage.loadTag(chunkPos).join().orElse(null);
             if (nbt == null) {
                 result = 0L;
                 return;
             }
 
-            WorldChunk chunk = ChunkSerializer.deserialize(chunkPos, nbt, mcWorld).getLeft();
+            LevelChunk chunk = ChunkSerializer.deserialize(chunkPos, nbt, mcWorld).getLeft();
             result = ChunkSerializer.fingerprint(chunk);
         }
 
@@ -1559,7 +1559,7 @@ public class Worlds implements AutoCloseable {
 
         @Override
         public void run() {
-            NbtCompound nbt = source.storage.loadTag(chunkPos).join().orElse(null);
+            CompoundTag nbt = source.storage.loadTag(chunkPos).join().orElse(null);
             if (nbt == null) {
                 done = true;
                 return;
@@ -1567,7 +1567,7 @@ public class Worlds implements AutoCloseable {
 
             // If source age is unknown, check the nbt for it
             if (sourceAge == 1) {
-                age = nbt.getLong("age", 0);
+                age = nbt.getLongOr("age", 0);
                 if (age < targetAge) {
                     done = true;
                     return;
@@ -1579,7 +1579,7 @@ public class Worlds implements AutoCloseable {
             // Save doesn't return a future, so we instead wait for all writes to be done (syncing to disk only once
             // after every job for the region is done)
             target.storage.save(chunkPos, nbt);
-            ((StorageIoWorker) target.storage.getWorker()).completeAll(false).join();
+            ((IOWorker) target.storage.chunkScanner()).synchronize(false).join();
             done = true;
         }
     }

@@ -4,12 +4,12 @@ import de.johni0702.minecraft.bobby.FakeChunkManager;
 import de.johni0702.minecraft.bobby.FakeChunkStorage;
 import de.johni0702.minecraft.bobby.Worlds;
 import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.GameOptions;
-import net.minecraft.client.world.ClientWorld;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Util;
-import net.minecraft.util.profiler.Profiler;
-import net.minecraft.util.profiler.Profilers;
+import net.minecraft.util.profiling.Profiler;
+import net.minecraft.util.profiling.ProfilerFiller;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,37 +18,37 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(MinecraftClient.class)
+@Mixin(Minecraft.class)
 public abstract class MinecraftClientMixin {
 
-    @Shadow @Final public GameOptions options;
+    @Shadow @Final public Options options;
 
-    @Shadow @Nullable public ClientWorld world;
+    @Shadow @Nullable public ClientLevel level;
 
-    @Inject(method = "render", at = @At(value = "CONSTANT", args = "stringValue=tick"))
+    @Inject(method = "runTick", at = @At(value = "CONSTANT", args = "stringValue=tick"))
     private void bobbyUpdate(CallbackInfo ci) {
-        if (world == null) {
+        if (level == null) {
             return;
         }
-        FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) world.getChunkManager()).bobby_getFakeChunkManager();
+        FakeChunkManager bobbyChunkManager = ((ClientChunkManagerExt) level.getChunkSource()).bobby_getFakeChunkManager();
         if (bobbyChunkManager == null) {
             return;
         }
 
-        Profiler profiler = Profilers.get();
+        ProfilerFiller profiler = Profiler.get();
         profiler.push("bobbyUpdate");
 
-        int maxFps = options.getMaxFps().getValue();
-        long frameTime = 1_000_000_000 / (maxFps == GameOptions.MAX_FPS_LIMIT ? 120 : maxFps);
+        int maxFps = options.framerateLimit().get();
+        long frameTime = 1_000_000_000 / (maxFps == Options.UNLIMITED_FRAMERATE_CUTOFF ? 120 : maxFps);
         // Arbitrarily choosing 1/4 of frame time as our max budget, that way we're hopefully not noticeable.
         long frameBudget = frameTime / 4;
-        long timeLimit = Util.getMeasuringTimeNano() + frameBudget;
-        bobbyChunkManager.update(false, () -> Util.getMeasuringTimeNano() < timeLimit);
+        long timeLimit = Util.getNanos() + frameBudget;
+        bobbyChunkManager.update(false, () -> Util.getNanos() < timeLimit);
 
         profiler.pop();
     }
 
-    @Inject(method = "onDisconnected", at = @At("RETURN"))
+    @Inject(method = "clearDownloadedResourcePacks", at = @At("RETURN"))
     private void bobbyClose(CallbackInfo ci) {
         Worlds.closeAll();
         FakeChunkStorage.closeAll();

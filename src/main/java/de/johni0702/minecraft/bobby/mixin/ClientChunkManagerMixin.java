@@ -5,14 +5,6 @@ import de.johni0702.minecraft.bobby.FakeChunk;
 import de.johni0702.minecraft.bobby.FakeChunkManager;
 import de.johni0702.minecraft.bobby.VisibleChunksTracker;
 import de.johni0702.minecraft.bobby.ext.ClientChunkManagerExt;
-import net.minecraft.client.world.ClientChunkManager;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.s2c.play.ChunkData;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.WorldChunk;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
 import org.objectweb.asm.Opcodes;
@@ -30,13 +22,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import net.minecraft.client.multiplayer.ClientChunkCache;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.levelgen.Heightmap;
 
-@Mixin(ClientChunkManager.class)
+@Mixin(ClientChunkCache.class)
 public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
-    @Shadow @Final private WorldChunk emptyChunk;
+    @Shadow @Final private LevelChunk emptyChunk;
 
-    @Shadow @Nullable public abstract WorldChunk getChunk(int i, int j, ChunkStatus chunkStatus, boolean bl);
-    @Shadow private static int getChunkMapRadius(int loadDistance) { throw new AssertionError(); }
+    @Shadow @Nullable public abstract LevelChunk getChunk(int i, int j, ChunkStatus chunkStatus, boolean bl);
+    @Shadow private static int calculateStorageRange(int loadDistance) { throw new AssertionError(); }
 
     protected FakeChunkManager bobbyChunkManager;
 
@@ -45,13 +45,13 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
     private final VisibleChunksTracker realChunksTracker = new VisibleChunksTracker();
 
     // List of real chunks saved just before they are unloaded, so we can restore fake ones in their place afterwards
-    private final List<Pair<Long, Supplier<WorldChunk>>> bobbyChunkReplacements = new ArrayList<>();
+    private final List<Pair<Long, Supplier<LevelChunk>>> bobbyChunkReplacements = new ArrayList<>();
 
     @Inject(method = "<init>", at = @At("RETURN"))
-    private void bobbyInit(ClientWorld world, int loadDistance, CallbackInfo ci) {
+    private void bobbyInit(ClientLevel world, int loadDistance, CallbackInfo ci) {
         if (Bobby.getInstance().isEnabled()) {
-            bobbyChunkManager = new FakeChunkManager(world, (ClientChunkManager) (Object) this);
-            realChunksTracker.update(0, 0, getChunkMapRadius(loadDistance), null, null);
+            bobbyChunkManager = new FakeChunkManager(world, (ClientChunkCache) (Object) this);
+            realChunksTracker.update(0, 0, calculateStorageRange(loadDistance), null, null);
         }
     }
 
@@ -65,8 +65,8 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
         return realChunksTracker;
     }
 
-    @Inject(method = "getChunk(IILnet/minecraft/world/chunk/ChunkStatus;Z)Lnet/minecraft/world/chunk/WorldChunk;", at = @At("RETURN"), cancellable = true)
-    private void bobbyGetChunk(int x, int z, ChunkStatus chunkStatus, boolean orEmpty, CallbackInfoReturnable<WorldChunk> ci) {
+    @Inject(method = "getChunk(IILnet/minecraft/world/level/chunk/status/ChunkStatus;Z)Lnet/minecraft/world/level/chunk/LevelChunk;", at = @At("RETURN"), cancellable = true)
+    private void bobbyGetChunk(int x, int z, ChunkStatus chunkStatus, boolean orEmpty, CallbackInfoReturnable<LevelChunk> ci) {
         // Did we find a live chunk?
         if (ci.getReturnValue() != (orEmpty ? emptyChunk : null)) {
             return;
@@ -77,14 +77,14 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
         }
 
         // Otherwise, see if we've got one
-        WorldChunk chunk = bobbyChunkManager.getChunk(x, z);
+        LevelChunk chunk = bobbyChunkManager.getChunk(x, z);
         if (chunk != null) {
             ci.setReturnValue(chunk);
         }
     }
 
-    @Inject(method = "loadChunkFromPacket", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/world/ClientChunkManager$ClientChunkMap;getIndex(II)I"))
-    private void bobbyUnloadFakeChunk(int x, int z, PacketByteBuf buf, Map<Heightmap.Type, long[]> heightmaps, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfoReturnable<WorldChunk> cir) {
+    @Inject(method = "replaceWithPacketData", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientChunkCache$Storage;getIndex(II)I"))
+    private void bobbyUnloadFakeChunk(int x, int z, FriendlyByteBuf buf, Map<Heightmap.Types, long[]> heightmaps, Consumer<ClientboundLevelChunkPacketData.BlockEntityTagOutput> consumer, CallbackInfoReturnable<LevelChunk> cir) {
         if (bobbyChunkManager == null) {
             return;
         }
@@ -94,13 +94,13 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
         bobbyChunkManager.unload(x, z, true);
     }
 
-    @Inject(method = "loadChunkFromPacket", at = @At("RETURN"))
-    private void bobbyFingerprintRealChunk(CallbackInfoReturnable<WorldChunk> cir) {
+    @Inject(method = "replaceWithPacketData", at = @At("RETURN"))
+    private void bobbyFingerprintRealChunk(CallbackInfoReturnable<LevelChunk> cir) {
         if (bobbyChunkManager == null) {
             return;
         }
 
-        WorldChunk chunk = cir.getReturnValue();
+        LevelChunk chunk = cir.getReturnValue();
         if (chunk == null) {
             return; // can happen when server sends out-of-bounds chunk
         }
@@ -109,15 +109,15 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
 
     @Unique
     private void saveRealChunk(long chunkPos) {
-        int chunkX = ChunkPos.getPackedX(chunkPos);
-        int chunkZ = ChunkPos.getPackedZ(chunkPos);
+        int chunkX = ChunkPos.getX(chunkPos);
+        int chunkZ = ChunkPos.getZ(chunkPos);
 
-        WorldChunk chunk = getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
+        LevelChunk chunk = getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
         if (chunk == null || chunk instanceof FakeChunk) {
             return;
         }
 
-        Supplier<WorldChunk> copy = bobbyChunkManager.save(chunk);
+        Supplier<LevelChunk> copy = bobbyChunkManager.save(chunk);
 
         if (bobbyChunkManager.shouldBeLoaded(chunkX, chunkZ)) {
             bobbyChunkReplacements.add(Pair.of(chunkPos, copy));
@@ -126,16 +126,16 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
 
     @Unique
     private void substituteFakeChunksForUnloadedRealOnes() {
-        for (Pair<Long, Supplier<WorldChunk>> entry : bobbyChunkReplacements) {
+        for (Pair<Long, Supplier<LevelChunk>> entry : bobbyChunkReplacements) {
             long chunkPos = entry.getKey();
-            int chunkX = ChunkPos.getPackedX(chunkPos);
-            int chunkZ = ChunkPos.getPackedZ(chunkPos);
+            int chunkX = ChunkPos.getX(chunkPos);
+            int chunkZ = ChunkPos.getZ(chunkPos);
             bobbyChunkManager.load(chunkX, chunkZ, entry.getValue().get());
         }
         bobbyChunkReplacements.clear();
     }
 
-    @Inject(method = "unload", at = @At("HEAD"))
+    @Inject(method = "drop", at = @At("HEAD"))
     private void bobbySaveChunk(ChunkPos pos, CallbackInfo ci) {
         if (bobbyChunkManager == null) {
             return;
@@ -144,7 +144,7 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
         saveRealChunk(pos.toLong());
     }
 
-    @Inject(method = "setChunkMapCenter", at = @At("HEAD"))
+    @Inject(method = "updateViewCenter", at = @At("HEAD"))
     private void bobbySaveChunksBeforeMove(int x, int z, CallbackInfo ci) {
         if (bobbyChunkManager == null) {
             return;
@@ -153,16 +153,16 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
         realChunksTracker.updateCenter(x, z, this::saveRealChunk, null);
     }
 
-    @Inject(method = "updateLoadDistance", at = @At("HEAD"))
+    @Inject(method = "updateViewRadius", at = @At("HEAD"))
     private void bobbySaveChunksBeforeResize(int loadDistance, CallbackInfo ci) {
         if (bobbyChunkManager == null) {
             return;
         }
 
-        realChunksTracker.updateViewDistance(getChunkMapRadius(loadDistance), this::saveRealChunk, null);
+        realChunksTracker.updateViewDistance(calculateStorageRange(loadDistance), this::saveRealChunk, null);
     }
 
-    @Inject(method = { "unload", "setChunkMapCenter", "updateLoadDistance" }, at = @At("RETURN"))
+    @Inject(method = { "drop", "updateViewCenter", "updateViewRadius" }, at = @At("RETURN"))
     private void bobbySubstituteFakeChunksForUnloadedRealOnes(CallbackInfo ci) {
         if (bobbyChunkManager == null) {
             return;
@@ -171,19 +171,19 @@ public abstract class ClientChunkManagerMixin implements ClientChunkManagerExt {
         substituteFakeChunksForUnloadedRealOnes();
     }
 
-    @Inject(method = "updateLoadDistance", at = @At(value = "FIELD", target = "Lnet/minecraft/client/world/ClientChunkManager;chunks:Lnet/minecraft/client/world/ClientChunkManager$ClientChunkMap;", opcode = Opcodes.PUTFIELD, shift = At.Shift.AFTER))
+    @Inject(method = "updateViewRadius", at = @At(value = "FIELD", target = "Lnet/minecraft/client/multiplayer/ClientChunkCache;storage:Lnet/minecraft/client/multiplayer/ClientChunkCache$Storage;", opcode = Opcodes.PUTFIELD, shift = At.Shift.AFTER))
     private void reAddEmptyFakeChunks(CallbackInfo ci) {
         if (bobbyChunkManager == null) {
             return;
         }
 
-        for (WorldChunk chunk : bobbyChunkManager.getFakeChunks()) {
+        for (LevelChunk chunk : bobbyChunkManager.getFakeChunks()) {
             ChunkPos pos = chunk.getPos();
             bobbyChunkManager.loadEmptySectionsOfFakeChunk(pos.x, pos.z, chunk);
         }
     }
 
-    @Inject(method = "getDebugString", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "gatherStats", at = @At("RETURN"), cancellable = true)
     private void bobbyDebugString(CallbackInfoReturnable<String> cir) {
         if (bobbyChunkManager == null) {
             return;
