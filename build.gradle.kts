@@ -60,16 +60,14 @@ dependencies {
 }
 
 tasks.processResources {
-	inputs.property("version", project.version)
-	inputs.property("clothConfigVersion", clothConfigVersion)
-	inputs.property("modMenuVersion", modMenuVersion)
-
+	val expansions = mutableMapOf(
+		"version" to project.version,
+		"clothConfigVersion" to clothConfigVersion,
+		"modMenuVersion" to modMenuVersion
+	)
+	inputs.property("expansions", expansions)
 	filesMatching("fabric.mod.json") {
-		expand(mutableMapOf(
-				"version" to project.version,
-				"clothConfigVersion" to clothConfigVersion,
-				"modMenuVersion" to modMenuVersion
-		))
+		expand(expansions)
 	}
 }
 
