@@ -50,8 +50,8 @@ public class FakeChunk extends LevelChunk {
         int blockDelta = enabled ? 5 : 0;
         int skyDelta = enabled ? -3 + (int) (-7 * gamma) : 0;
 
-        int x = getPos().x;
-        int z = getPos().z;
+        int x = getPos().x();
+        int z = getPos().z();
         for (int y = getMinSectionY(); y < getMaxSectionY(); y++) {
             updateTaintedState(blockLightProvider, x, y, z, blockDelta);
             updateTaintedState(skyLightProvider, x, y, z, skyDelta);

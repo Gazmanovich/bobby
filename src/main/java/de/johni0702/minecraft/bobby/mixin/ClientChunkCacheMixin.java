@@ -141,7 +141,7 @@ public abstract class ClientChunkCacheMixin implements ClientChunkCacheExt {
             return;
         }
 
-        saveRealChunk(pos.toLong());
+        saveRealChunk(pos.pack());
     }
 
     @Inject(method = "updateViewCenter", at = @At("HEAD"))
@@ -179,7 +179,7 @@ public abstract class ClientChunkCacheMixin implements ClientChunkCacheExt {
 
         for (LevelChunk chunk : bobbyChunkManager.getFakeChunks()) {
             ChunkPos pos = chunk.getPos();
-            bobbyChunkManager.loadEmptySectionsOfFakeChunk(pos.x, pos.z, chunk);
+            bobbyChunkManager.loadEmptySectionsOfFakeChunk(pos.x(), pos.z(), chunk);
         }
     }
 

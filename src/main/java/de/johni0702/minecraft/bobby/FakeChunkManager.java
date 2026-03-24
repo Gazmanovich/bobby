@@ -153,7 +153,7 @@ public class FakeChunkManager {
     }
 
     public LevelChunk getChunk(int x, int z) {
-        return fakeChunks.get(ChunkPos.asLong(x, z));
+        return fakeChunks.get(ChunkPos.pack(x, z));
     }
 
     public FakeChunkStorage getStorage() {
@@ -190,8 +190,8 @@ public class FakeChunkManager {
 
         List<LoadingJob> newJobs = new ArrayList<>();
         ChunkPos playerChunkPos = player.chunkPosition();
-        int newCenterX =  playerChunkPos.x;
-        int newCenterZ = playerChunkPos.z;
+        int newCenterX =  playerChunkPos.x();
+        int newCenterZ = playerChunkPos.z();
         chunkTracker.update(newCenterX, newCenterZ, newViewDistance, chunkPos -> {
             // Chunk is now outside view distance, can be unloaded / cancelled
             cancelLoad(chunkPos);
@@ -221,7 +221,7 @@ public class FakeChunkManager {
         if (!newJobs.isEmpty()) {
             newJobs.sort(LoadingJob.BY_DISTANCE);
             newJobs.forEach(job -> {
-                loadingJobs.put(ChunkPos.asLong(job.x, job.z), job);
+                loadingJobs.put(ChunkPos.pack(job.x, job.z), job);
                 loadExecutor.execute(job);
             });
         }
@@ -371,7 +371,7 @@ public class FakeChunkManager {
     }
 
     public void load(int x, int z, LevelChunk chunk) {
-        fakeChunks.put(ChunkPos.asLong(x, z), chunk);
+        fakeChunks.put(ChunkPos.pack(x, z), chunk);
 
         loadEmptySectionsOfFakeChunk(x, z, chunk);
         world.onChunkLoaded(new ChunkPos(x, z));
@@ -395,7 +395,7 @@ public class FakeChunkManager {
     }
 
     public boolean unload(int x, int z, boolean willBeReplaced) {
-        long chunkPos = ChunkPos.asLong(x, z);
+        long chunkPos = ChunkPos.pack(x, z);
         cancelLoad(chunkPos);
         LevelChunk chunk = fakeChunks.remove(chunkPos);
         if (chunk != null) {
@@ -472,7 +472,7 @@ public class FakeChunkManager {
             return;
         }
 
-        long chunkCoord = chunk.getPos().toLong();
+        long chunkCoord = chunk.getPos().pack();
 
         FingerprintJob job = fingerprintJobs.get(chunkCoord);
         if (job != null) {

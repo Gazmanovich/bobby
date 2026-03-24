@@ -19,8 +19,8 @@ public abstract class SodiumClientPacketListenerMixin {
 
     @Inject(method = "handleForgetLevelChunk", at = @At("RETURN"))
     private void keepChunkRenderedIfReplacedByFakeChunk(ClientboundForgetLevelChunkPacket packet, CallbackInfo ci) {
-        int x = packet.pos().x;
-        int z = packet.pos().z;
+        int x = packet.pos().x();
+        int z = packet.pos().z();
         LevelChunk chunk = this.level.getChunk(x, z);
         // Sodium removes the block and light flags from the unloaded chunk at the end of this method.
         // We however load our fake chunk at the end of the unload method in ClientChunkManager, so Sodium naturally

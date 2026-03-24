@@ -1,5 +1,5 @@
 plugins {
-	id("fabric-loom") version "1.15.5"
+	id("net.fabricmc.fabric-loom") version "1.15.5"
 	id("maven-publish")
 	id("com.github.breadmoirai.github-release") version "2.2.12"
 	id("com.matthewprenger.cursegradle") version "1.4.0"
@@ -20,7 +20,6 @@ version = "$modVersion+mc$minecraftVersion"
 sourceSets {
 	val main = main.get()
 	create("sodium06") {
-		loom.createRemapConfigurations(this)
 		compileClasspath += main.compileClasspath
 		compileClasspath += main.output
 		main.runtimeClasspath += output
@@ -38,25 +37,24 @@ dependencies {
 	val starlightVersion: String by project
 	val confabricateVersion: String by project
 	minecraft("com.mojang:minecraft:${minecraftVersion}")
-	mappings(loom.officialMojangMappings())
-	modImplementation("net.fabricmc:fabric-loader:${loaderVersion}")
+	implementation("net.fabricmc:fabric-loader:${loaderVersion}")
 
-	modImplementation(include(fabricApi.module("fabric-api-base", fabricApiVersion))!!)
-	modImplementation(include(fabricApi.module("fabric-command-api-v2", fabricApiVersion))!!)
+	implementation(include(fabricApi.module("fabric-api-base", fabricApiVersion))!!)
+	implementation(include(fabricApi.module("fabric-command-api-v2", fabricApiVersion))!!)
 
 	// we don't need the full thing but our deps pull in an outdated one
-	modImplementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
+	implementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
 
 	implementation(include("org.spongepowered:configurate-core:$configurateVersion")!!)
 	implementation(include("org.spongepowered:configurate-hocon:$configurateVersion")!!)
 	include("io.leangen.geantyref:geantyref:$geantyrefVersion")
 	include("com.typesafe:config:$hoconVersion")
 
-	"modSodium06CompileOnly"("maven.modrinth:sodium:$sodium06Version")
-	modCompileOnly("maven.modrinth:starlight:$starlightVersion")
-	modCompileOnly("ca.stellardrift:confabricate:$confabricateVersion")
-	modImplementation("me.shedaniel.cloth:cloth-config-fabric:$clothConfigVersion")
-	modImplementation("com.terraformersmc:modmenu:$modMenuVersion")
+	"sodium06CompileOnly"("maven.modrinth:sodium:$sodium06Version")
+	compileOnly("maven.modrinth:starlight:$starlightVersion")
+	compileOnly("ca.stellardrift:confabricate:$confabricateVersion")
+	implementation("me.shedaniel.cloth:cloth-config-fabric:$clothConfigVersion")
+	implementation("com.terraformersmc:modmenu:$modMenuVersion")
 }
 
 tasks.processResources {
@@ -73,8 +71,8 @@ tasks.processResources {
 
 tasks.withType<JavaCompile> {
 	options.encoding = "UTF-8"
-	sourceCompatibility = "21"
-	targetCompatibility = "21"
+	sourceCompatibility = "25"
+	targetCompatibility = "25"
 }
 
 tasks.withType<AbstractArchiveTask> {
@@ -126,7 +124,7 @@ githubRelease {
 	repo(project.property("github.repo") as String)
 	targetCommitish { gik.head!!.id }
 	releaseName("Version $modVersion for Minecraft $minecraftVersion")
-	releaseAssets(tasks.remapJar)
+	releaseAssets(tasks.jar)
 	body(readChangelog())
 }
 
@@ -137,7 +135,7 @@ curseforge {
 		id = project.property("curseforge.id") as String
 		changelog = readChangelog()
 		releaseType = "release"
-		mainArtifact(tasks.remapJar.flatMap { it.archiveFile }, closureOf<com.matthewprenger.cursegradle.CurseArtifact> {
+		mainArtifact(tasks.jar.flatMap { it.archiveFile }, closureOf<com.matthewprenger.cursegradle.CurseArtifact> {
 			relations(closureOf<com.matthewprenger.cursegradle.CurseRelation> {
 				embeddedLibrary("confabricate")
 				optionalDependency("cloth-config")
@@ -147,7 +145,7 @@ curseforge {
 		})
 		addGameVersion("Fabric")
 		addGameVersion(minecraftVersion)
-		addGameVersion("Java 17")
+		addGameVersion("Java 25")
 	})
 	options(closureOf<com.matthewprenger.cursegradle.Options> {
 		javaVersionAutoDetect = false
@@ -156,17 +154,17 @@ curseforge {
 	})
 }
 tasks.withType<com.matthewprenger.cursegradle.CurseUploadTask> {
-	dependsOn(tasks.remapJar)
+	dependsOn(tasks.jar)
 }
 
 tasks.modrinth {
-	dependsOn(tasks.remapJar)
+	dependsOn(tasks.jar)
 }
 
 modrinth {
 	token.set(project.findProperty("modrinth.token") as String? ?: "DUMMY")
 	projectId.set(project.property("modrinth.id") as String)
-	uploadFile.set(tasks.remapJar.get())
+	uploadFile.set(tasks.jar.get())
 	changelog.set(readChangelog())
 	dependencies {
 		optional.project("9s6osm5g") // Cloth Config

@@ -69,7 +69,7 @@ public class LastAccessFile implements Closeable {
 
     public void touchRegion(int x, int z) {
         synchronized (accessMap) {
-            accessMap.put(ChunkPos.asLong(x, z), now);
+            accessMap.put(ChunkPos.pack(x, z), now);
         }
     }
 
@@ -127,7 +127,7 @@ public class LastAccessFile implements Closeable {
             while (buf.isReadable()) {
                 int x = buf.readVarInt();
                 int z = buf.readVarInt();
-                map.put(ChunkPos.asLong(x, z), buf.readVarLong());
+                map.put(ChunkPos.pack(x, z), buf.readVarLong());
             }
         }
         return map;

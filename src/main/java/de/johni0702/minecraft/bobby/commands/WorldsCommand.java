@@ -20,7 +20,7 @@ public class WorldsCommand implements Command<FabricClientCommandSource> {
     @Override
     public int run(CommandContext<FabricClientCommandSource> context) {
         FabricClientCommandSource source = context.getSource();
-        ClientLevel world = source.getWorld();
+        ClientLevel world = source.getLevel();
 
         FakeChunkManager bobbyChunkManager = ((ClientChunkCacheExt) world.getChunkSource()).bobby_getFakeChunkManager();
         if (bobbyChunkManager == null) {

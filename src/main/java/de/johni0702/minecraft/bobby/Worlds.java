@@ -150,7 +150,7 @@ public class Worlds implements AutoCloseable {
         if (!outdatedWorlds.isEmpty()) {
             Component text = translatable("bobby.upgrade.required");
             Minecraft client = Minecraft.getInstance();
-            client.execute(() -> client.gui.getChat().addMessage(text));
+            client.execute(() -> client.gui.getChat().addClientSystemMessage(text));
         }
     }
 
@@ -174,7 +174,7 @@ public class Worlds implements AutoCloseable {
     public CompletableFuture<Optional<CompoundTag>> loadTag(ChunkPos chunkPos) {
         RegionPos regionPos = RegionPos.from(chunkPos);
         long regionCoord = regionPos.toLong();
-        long chunkCoord = chunkPos.toLong();
+        long chunkCoord = chunkPos.pack();
 
         IntList worldsToLoad = null;
         List<CompletableFuture<Optional<CompoundTag>>> unknownAgeResults = null;
@@ -392,8 +392,8 @@ public class Worlds implements AutoCloseable {
                 // Special case: Chunk was not found, remove it from the index
                 Region region = world.regions.get(RegionPos.from(chunkPos).toLong());
                 assert region != null;
-                region.chunks.remove(chunkPos.toLong());
-                region.chunkFingerprints.remove(chunkPos.toLong());
+                region.chunks.remove(chunkPos.pack());
+                region.chunkFingerprints.remove(chunkPos.pack());
                 region.dirty = true;
                 world.markContentDirty();
             } else {
@@ -612,7 +612,7 @@ public class Worlds implements AutoCloseable {
                             continue;
                         }
 
-                        CopyJob copyJob = new CopyJob(sourceWorld, targetWorld, new ChunkPos(chunkCoord), sourceChunkAge, targetChunkAge);
+                        CopyJob copyJob = new CopyJob(sourceWorld, targetWorld, ChunkPos.unpack(chunkCoord), sourceChunkAge, targetChunkAge);
                         state.activeJobs.add(copyJob);
                         copyExecutor.execute(copyJob);
                     }
@@ -655,7 +655,7 @@ public class Worlds implements AutoCloseable {
                             continue;
                         }
 
-                        long chunkCoord = job.chunkPos.toLong();
+                        long chunkCoord = job.chunkPos.pack();
                         long fingerprint = sourceRegion.chunkFingerprints.get(chunkCoord);
                         long age = job.age;
 
@@ -745,7 +745,7 @@ public class Worlds implements AutoCloseable {
         // Wrapped to wait for all pending fingerprint updates to be committed, so we don't overwrite them
         runOrScheduleWork(() -> {
             tracker.forEach(chunkCoord -> {
-                ChunkPos chunkPos = new ChunkPos(chunkCoord);
+                ChunkPos chunkPos = ChunkPos.unpack(chunkCoord);
                 RegionPos regionPos = RegionPos.from(chunkPos);
                 long regionCoord = regionPos.toLong();
 
@@ -784,7 +784,7 @@ public class Worlds implements AutoCloseable {
 
         RegionPos regionPos = RegionPos.from(chunkPos);
         long regionCoord = regionPos.toLong();
-        long chunkCoord = chunkPos.toLong();
+        long chunkCoord = chunkPos.pack();
 
         Predicate<World> couldWorldMatch = world -> {
             if (world == currentWorld) {
@@ -1243,7 +1243,7 @@ public class Worlds implements AutoCloseable {
                         long chunkCoord = entry.getLongKey();
                         long fingerprint = entry.getLongValue();
                         if (fingerprint == 0) {
-                            futures.add(computeLegacyFingerprint(world, new ChunkPos(chunkCoord), source.getWorld()));
+                            futures.add(computeLegacyFingerprint(world, ChunkPos.unpack(chunkCoord), source.getLevel()));
                         }
                     }
                 }
@@ -1319,7 +1319,7 @@ public class Worlds implements AutoCloseable {
 
         public void setFingerprint(ChunkPos chunkPos, long fingerprint) {
             RegionPos regionPos = RegionPos.from(chunkPos);
-            long chunkCoord = chunkPos.toLong();
+            long chunkCoord = chunkPos.pack();
             long regionCoord = regionPos.toLong();
 
             if (knownRegions.add(regionCoord)) {
@@ -1401,7 +1401,7 @@ public class Worlds implements AutoCloseable {
             if (Files.notExists(file)) {
                 Region region = new Region();
                 pos.getContainedChunks().forEach(chunkPos -> {
-                    long chunkCoord = chunkPos.toLong();
+                    long chunkCoord = chunkPos.pack();
                     region.chunks.put(chunkCoord, 1); // 1 means "unknown age" (0 is reserved for "no chunk")
                     region.chunkFingerprints.put(chunkCoord, 0); // 0 means "unknown fingerprint"
                 });
@@ -1535,7 +1535,7 @@ public class Worlds implements AutoCloseable {
         @Override
         public int hashCode() {
             // Using 127 instead of the traditional 31, so worlds are separated by more than a regular render distance
-            return world.id * 127 + RegionPos.hashCode(chunkPos.toLong());
+            return world.id * 127 + RegionPos.hashCode(chunkPos.pack());
         }
     }
 

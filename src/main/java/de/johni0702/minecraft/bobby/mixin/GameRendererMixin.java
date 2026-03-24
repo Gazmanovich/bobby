@@ -11,6 +11,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.fog.FogData;
 import net.minecraft.client.renderer.fog.FogRenderer;
 import net.minecraft.util.profiling.Profiler;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -62,10 +63,11 @@ public abstract class GameRendererMixin implements GameRendererExt {
         return skyFogRenderer;
     }
 
-    @WrapOperation(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/fog/FogRenderer;setupFog(Lnet/minecraft/client/Camera;ILnet/minecraft/client/DeltaTracker;FLnet/minecraft/client/multiplayer/ClientLevel;)Lorg/joml/Vector4f;"))
-    private Vector4f updateSkyFogRenderer(FogRenderer instance, Camera camera, int viewDistance, DeltaTracker tickCounter, float skyDarkness, ClientLevel world, Operation<Vector4f> operation) {
+    @WrapOperation(method = "extractCamera", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/fog/FogRenderer;setupFog(Lnet/minecraft/client/Camera;ILnet/minecraft/client/DeltaTracker;FLnet/minecraft/client/multiplayer/ClientLevel;)Lnet/minecraft/client/renderer/fog/FogData;"))
+    private FogData updateSkyFogRenderer(FogRenderer instance, Camera camera, int viewDistance, DeltaTracker tickCounter, float skyDarkness, ClientLevel world, Operation<FogData> operation) {
         if (viewDistance >= 32) {
-            skyFogRenderer.setupFog(camera, 32, tickCounter, skyDarkness, world);
+            // FIXME should be passed via CameraRenderState
+            skyFogRenderer.updateBuffer(skyFogRenderer.setupFog(camera, 32, tickCounter, skyDarkness, world));
         }
         return operation.call(instance, camera, viewDistance, tickCounter, skyDarkness, world);
     }

@@ -79,9 +79,9 @@ public class ChunkSerializer {
         ChunkPos chunkPos = chunk.getPos();
         CompoundTag level = new CompoundTag();
         level.putInt("DataVersion", SharedConstants.getCurrentVersion().dataVersion().version());
-        level.putInt("xPos", chunkPos.x);
+        level.putInt("xPos", chunkPos.x());
         level.putInt("yPos", chunk.getMinSectionY());
-        level.putInt("zPos", chunkPos.z);
+        level.putInt("zPos", chunkPos.z());
         level.putBoolean("isLightOn", true);
         level.putString("Status", "full");
 
@@ -299,7 +299,7 @@ public class ChunkSerializer {
             LightEngineExt blockLightProvider = LightEngineExt.get(lightingProvider.getLayerListener(LightLayer.BLOCK));
             LightEngineExt skyLightProvider = LightEngineExt.get(lightingProvider.getLayerListener(LightLayer.SKY));
 
-            levelLightEngineExt.bobby_enabledColumn(SectionPos.getZeroNode(pos.x, pos.z));
+            levelLightEngineExt.bobby_enabledColumn(SectionPos.getZeroNode(pos.x(), pos.z()));
 
             for (int i = -1; i < chunkSections.length + 1; i++) {
                 int y = world.getSectionYFromSectionIndex(i);
@@ -405,7 +405,7 @@ public class ChunkSerializer {
     }
 
     private static void logRecoverableError(ChunkPos chunkPos, int y, String message) {
-        LOGGER.error("Recoverable errors when loading section [" + chunkPos.x + ", " + y + ", " + chunkPos.z + "]: " + message);
+        LOGGER.error("Recoverable errors when loading section [" + chunkPos.x() + ", " + y + ", " + chunkPos.z() + "]: " + message);
     }
 
     /**

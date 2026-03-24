@@ -21,7 +21,7 @@ public class UpgradeCommand implements Command<FabricClientCommandSource> {
     public int run(CommandContext<FabricClientCommandSource> context) {
         FabricClientCommandSource source = context.getSource();
         Minecraft client = source.getClient();
-        ClientLevel world = source.getWorld();
+        ClientLevel world = source.getLevel();
 
         ClientChunkCacheExt chunkManager = (ClientChunkCacheExt) world.getChunkSource();
         FakeChunkManager bobbyChunkManager = chunkManager.bobby_getFakeChunkManager();
@@ -90,7 +90,7 @@ public class UpgradeCommand implements Command<FabricClientCommandSource> {
                 nextReport = now.plus(3, ChronoUnit.SECONDS);
 
                 Component text = Component.translatable("bobby.upgrade.progress", this.done, this.total, this.worldIndex + 1, this.totalWorlds);
-                client.execute(() -> client.gui.getChat().addMessage(text));
+                client.execute(() -> client.gui.getChat().addClientSystemMessage(text));
             }
         }
     }
