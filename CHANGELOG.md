@@ -1,4 +1,4 @@
-### 5.2.12-SNAPSHOT
+### 5.2.12
 - Update to Minecraft 26.1
 
 ### 5.2.11
